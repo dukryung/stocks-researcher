@@ -5,56 +5,33 @@
 import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 
-function text(formData: FormData, key: string): string {
-  return String(formData.get(key) ?? "").trim();
+export interface PrincipleInput {
+  title: string;
+  body: string;
 }
 
-function refresh() {
+// 편집 화면의 원칙 목록 전체를 화면 순서 그대로 저장한다. 중간에 실패하면 아무것도 바뀌지 않는다.
+export async function savePrinciples(items: PrincipleInput[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cleaned = items.map((p) => ({ title: String(p.title ?? "").trim(), body: String(p.body ?? "").trim() }));
+  if (cleaned.some((p) => !p.title)) return { ok: false, error: "제목이 비어 있는 원칙이 있습니다." };
+
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM principles");
+    for (const [i, p] of cleaned.entries()) {
+      await client.query("INSERT INTO principles (title, body, position) VALUES ($1, $2, $3)", [p.title, p.body, i]);
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("[principles] 저장 실패:", e);
+    return { ok: false, error: "저장 중 오류가 발생했습니다. 다시 시도해 주세요." };
+  } finally {
+    client.release();
+  }
+
   revalidatePath("/");
   revalidatePath("/principles");
-}
-
-export async function addPrinciple(formData: FormData) {
-  const title = text(formData, "title");
-  if (!title) return;
-  await getPool().query(
-    `INSERT INTO principles (title, body, position)
-     VALUES ($1, $2, COALESCE((SELECT max(position) + 1 FROM principles), 0))`,
-    [title, text(formData, "body")],
-  );
-  refresh();
-}
-
-export async function updatePrinciple(formData: FormData) {
-  const title = text(formData, "title");
-  if (!title) return;
-  await getPool().query("UPDATE principles SET title = $1, body = $2, updated_at = now() WHERE id = $3", [
-    title,
-    text(formData, "body"),
-    Number(formData.get("id")),
-  ]);
-  refresh();
-}
-
-export async function deletePrinciple(formData: FormData) {
-  await getPool().query("DELETE FROM principles WHERE id = $1", [Number(formData.get("id"))]);
-  refresh();
-}
-
-export async function movePrinciple(formData: FormData) {
-  const id = Number(formData.get("id"));
-  const direction = formData.get("direction") === "up" ? -1 : 1;
-  const pool = getPool();
-  const { rows } = await pool.query<{ id: number }>("SELECT id FROM principles ORDER BY position, id");
-  const ids = rows.map((r) => r.id);
-  const from = ids.indexOf(id);
-  const to = from + direction;
-  if (from < 0 || to < 0 || to >= ids.length) return;
-  [ids[from], ids[to]] = [ids[to], ids[from]];
-  // 순서를 0..n-1 로 다시 매긴다.
-  await pool.query(
-    "UPDATE principles p SET position = v.pos FROM unnest($1::int[]) WITH ORDINALITY AS v(id, pos) WHERE p.id = v.id",
-    [ids],
-  );
-  refresh();
+  return { ok: true };
 }
