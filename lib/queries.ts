@@ -1,5 +1,6 @@
 import { getPool } from "./db";
 import type { VisibleCategory } from "./categories";
+import { MACRO_CATEGORIES, type MacroCategory, type MacroSummary } from "./macro";
 
 export interface Principle {
   id: number;
@@ -26,7 +27,21 @@ export interface Briefing {
   date: string;
   headline_ko: string;
   company_summaries: Record<string, string>;
+  macro: MacroSummary | null;
   created_at: Date;
+}
+
+export interface MacroArticle {
+  id: number;
+  url: string;
+  title: string;
+  title_ko: string | null;
+  summary_ko: string | null;
+  source: string | null;
+  lang: string;
+  category: MacroCategory;
+  importance: number;
+  published_at: Date;
 }
 
 const VISIBLE = "category IN ('mou','investment','ceo','other')";
@@ -41,8 +56,8 @@ export async function getPrinciples(): Promise<Principle[]> {
 export async function getBriefing(date?: string): Promise<Briefing | null> {
   const { rows } = await getPool().query<Briefing>(
     date
-      ? "SELECT date, headline_ko, company_summaries, created_at FROM briefings WHERE date = $1"
-      : "SELECT date, headline_ko, company_summaries, created_at FROM briefings ORDER BY date DESC LIMIT 1",
+      ? "SELECT date, headline_ko, company_summaries, macro, created_at FROM briefings WHERE date = $1"
+      : "SELECT date, headline_ko, company_summaries, macro, created_at FROM briefings ORDER BY date DESC LIMIT 1",
     date ? [date] : [],
   );
   return rows[0] ?? null;
@@ -54,6 +69,16 @@ export async function getBriefingArticles(date: string): Promise<Article[]> {
      FROM articles WHERE briefing_date = $1 AND ${VISIBLE}
      ORDER BY importance DESC, published_at DESC`,
     [date],
+  );
+  return rows;
+}
+
+export async function getMacroArticles(date: string, limit = 8): Promise<MacroArticle[]> {
+  const { rows } = await getPool().query<MacroArticle>(
+    `SELECT id, url, title, title_ko, summary_ko, source, lang, category, importance, published_at
+     FROM articles WHERE briefing_date = $1 AND company_id = 'macro' AND category = ANY($2)
+     ORDER BY importance DESC, published_at DESC LIMIT $3`,
+    [date, [...MACRO_CATEGORIES], limit],
   );
   return rows;
 }

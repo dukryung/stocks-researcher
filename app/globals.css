@@ -13,6 +13,13 @@
   --up: #d93a3a;
   --down: #2a6fd6;
   --series-1: #2a78d6;
+  /* 매크로 분위기 배지 (항상 텍스트 라벨과 함께 쓴다) */
+  --mood-on: #0f8a5f;
+  --mood-on-soft: #e3f4ec;
+  --mood-off: #c4471c;
+  --mood-off-soft: #fbeae3;
+  --mood-neutral: #6b6a65;
+  --mood-neutral-soft: #ecebe7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,6 +35,12 @@
     --up: #f06a6a;
     --down: #5b9cec;
     --series-1: #3987e5;
+    --mood-on: #4cc493;
+    --mood-on-soft: #15302a;
+    --mood-off: #f08a5d;
+    --mood-off-soft: #3a2219;
+    --mood-neutral: #b5b4ab;
+    --mood-neutral-soft: #2a2a28;
   }
 }
 
@@ -42,6 +55,12 @@
   --color-accent-soft: var(--accent-soft);
   --color-up: var(--up);
   --color-down: var(--down);
+  --color-mood-on: var(--mood-on);
+  --color-mood-on-soft: var(--mood-on-soft);
+  --color-mood-off: var(--mood-off);
+  --color-mood-off-soft: var(--mood-off-soft);
+  --color-mood-neutral: var(--mood-neutral);
+  --color-mood-neutral-soft: var(--mood-neutral-soft);
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
 }
 

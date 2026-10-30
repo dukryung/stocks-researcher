@@ -1,36 +1,63 @@
 import { Suspense } from "react";
 import BriefingView from "@/components/BriefingView";
+import MacroIndicatorGrid from "@/components/MacroIndicatorGrid";
+import MacroSection from "@/components/MacroSection";
 import PriceGrid from "@/components/PriceGrid";
 import PrinciplesCard from "@/components/PrinciplesCard";
 import { formatBriefingDate } from "@/lib/format";
-import { getBriefing, getBriefingArticles, getPrinciples } from "@/lib/queries";
+import { fetchMacroIndicators, type MacroValue } from "@/lib/macro";
+import { getBriefing, getBriefingArticles, getMacroArticles, getPrinciples } from "@/lib/queries";
 import { fetchAllQuotes } from "@/lib/quotes";
 
 export const dynamic = "force-dynamic";
 
-// 주가 API 가 느릴 때도 원칙·브리핑은 바로 보이도록 주가 영역만 따로 스트리밍한다.
+// 주가·지표 API 가 느릴 때도 원칙·브리핑은 바로 보이도록 시세 영역만 따로 스트리밍한다.
 async function LivePriceGrid() {
   return <PriceGrid quotes={await fetchAllQuotes()} />;
 }
 
-function PriceGridFallback() {
-  return (
-    <section>
-      <h2 className="mb-3 text-lg font-bold">주가</h2>
-      <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-3">시세를 불러오는 중...</p>
-    </section>
+// 실시간 조회에 실패한 지표는 브리핑 시점 값을 '지연'으로 대신 보여준다.
+async function LiveMacroIndicators({ snapshot }: { snapshot: Record<string, MacroValue | null> }) {
+  const live = await fetchMacroIndicators();
+  const values = Object.fromEntries(
+    Object.entries(live).map(([id, v]) => [id, v ?? (snapshot[id] ? { ...snapshot[id], stale: true } : null)]),
   );
+  return <MacroIndicatorGrid values={values} />;
+}
+
+function LoadingBox({ text }: { text: string }) {
+  return <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-3">{text}</p>;
 }
 
 export default async function Home() {
   const [principles, briefing] = await Promise.all([getPrinciples(), getBriefing()]);
-  const articles = briefing ? await getBriefingArticles(briefing.date) : [];
+  const [articles, macroArticles] = briefing
+    ? await Promise.all([getBriefingArticles(briefing.date), getMacroArticles(briefing.date)])
+    : [[], []];
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 
   return (
     <div className="space-y-8">
       <PrinciplesCard principles={principles} />
-      <Suspense fallback={<PriceGridFallback />}>
+      <MacroSection
+        summary={briefing?.macro ?? null}
+        articles={macroArticles}
+        generatedAt={briefing?.macro ? briefing.created_at : null}
+        indicatorsNote="지표는 실시간 · 1분 캐시 · 미국 지표는 현지 기준 (이름에 마우스를 올리면 시각 표시) · 출처: 네이버 증권"
+        indicators={
+          <Suspense fallback={<LoadingBox text="지표를 불러오는 중..." />}>
+            <LiveMacroIndicators snapshot={briefing?.macro?.indicators ?? {}} />
+          </Suspense>
+        }
+      />
+      <Suspense
+        fallback={
+          <section>
+            <h2 className="mb-3 text-lg font-bold">주가</h2>
+            <LoadingBox text="시세를 불러오는 중..." />
+          </section>
+        }
+      >
         <LivePriceGrid />
       </Suspense>
       <section>

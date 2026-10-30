@@ -27,7 +27,7 @@ function buildQuery(base: string, keywords: string[], execNames: string[]): stri
   return `${base} (${terms.join(" OR ")}) when:3d`;
 }
 
-async function fetchFeed(query: string, lang: "en" | "ko"): Promise<RawArticle[]> {
+async function fetchFeed(query: string, lang: "en" | "ko", max = MAX_PER_FEED): Promise<RawArticle[]> {
   const locale = lang === "en" ? "hl=en-US&gl=US&ceid=US:en" : "hl=ko&gl=KR&ceid=KR:ko";
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&${locale}`;
   const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15000) });
@@ -53,7 +53,16 @@ async function fetchFeed(query: string, lang: "en" | "ko"): Promise<RawArticle[]
     })
     .filter((a) => a.url && a.title && !Number.isNaN(a.publishedAt.getTime()))
     .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
-    .slice(0, MAX_PER_FEED);
+    .slice(0, max);
+}
+
+function dedupeSince(articles: RawArticle[], since: Date): RawArticle[] {
+  const seen = new Set<string>();
+  return articles.filter((a) => {
+    if (a.publishedAt < since || seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
 }
 
 export async function fetchCompanyNews(company: Company, since: Date): Promise<RawArticle[]> {
@@ -61,10 +70,29 @@ export async function fetchCompanyNews(company: Company, since: Date): Promise<R
     fetchFeed(buildQuery(company.newsEn, KEYWORDS_EN, company.executives.map((e) => e.en)), "en"),
     fetchFeed(buildQuery(company.newsKo, KEYWORDS_KO, company.executives.map((e) => e.ko)), "ko"),
   ]);
-  const seen = new Set<string>();
-  return [...en, ...ko].filter((a) => {
-    if (a.publishedAt < since || seen.has(a.url)) return false;
-    seen.add(a.url);
-    return true;
+  return dedupeSince([...en, ...ko], since);
+}
+
+// 매크로 이슈 검색어. 주제별로 나눠 검색해야 한 주제(예: 증시 시황)가 결과를 독차지하지 않는다.
+const MACRO_QUERIES: { q: string; lang: "en" | "ko" }[] = [
+  { q: '(Fed OR FOMC OR "Federal Reserve" OR Powell OR "rate cut" OR "rate hike") when:2d', lang: "en" },
+  { q: '("Treasury yields" OR "bond market" OR "10-year yield") when:2d', lang: "en" },
+  { q: '(CPI OR inflation OR "jobs report" OR payrolls OR GDP OR recession) when:2d', lang: "en" },
+  { q: '(tariff OR "trade war" OR sanctions OR "oil prices" OR OPEC OR "dollar index") when:2d', lang: "en" },
+  { q: '("Wall Street" OR "S&P 500" OR "stock market" OR "Nasdaq") (stocks OR futures) when:1d', lang: "en" },
+  { q: '(연준 OR FOMC OR 파월 OR "미국 금리" OR "국채 금리") when:2d', lang: "ko" },
+  { q: "(환율 OR 원달러 OR 한국은행 OR 기준금리 OR 외환) when:2d", lang: "ko" },
+  { q: '(코스피 OR 증시 OR "외국인 매도" OR "외국인 순매수") when:1d', lang: "ko" },
+  { q: '(물가 OR 고용지표 OR 관세 OR 유가 OR "경기 침체") when:2d', lang: "ko" },
+];
+const MAX_PER_MACRO_FEED = 15;
+
+export async function fetchMacroNews(since: Date): Promise<RawArticle[]> {
+  const feeds = await Promise.allSettled(MACRO_QUERIES.map(({ q, lang }) => fetchFeed(q, lang, MAX_PER_MACRO_FEED)));
+  const articles = feeds.flatMap((f, i) => {
+    if (f.status === "fulfilled") return f.value;
+    console.error(`[macro-news] ${MACRO_QUERIES[i].q}:`, f.reason);
+    return [];
   });
+  return dedupeSince(articles, since);
 }

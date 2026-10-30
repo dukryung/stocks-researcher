@@ -40,3 +40,7 @@ CREATE TABLE IF NOT EXISTS briefings (
   prices            JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 오늘의 매크로 시황 { mood, mood_reason, bullets[], watch[], indicators{} } (lib/macro.ts MacroSummary)
+-- 매크로 기사는 articles 에 company_id = 'macro' 로 저장한다.
+ALTER TABLE briefings ADD COLUMN IF NOT EXISTS macro JSONB;
