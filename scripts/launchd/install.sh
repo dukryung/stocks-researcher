@@ -24,6 +24,11 @@ render() {
   sed -e "s#__REPO__#$REPO#g" -e "s#__NPM__#$NPM#g" -e "s#__PATH__#$PATH_VALUE#g" \
     "$REPO/scripts/launchd/$1.plist" > "$AGENTS/$1.plist"
   launchctl bootout "gui/$(id -u)/$1" 2>/dev/null || true
+  # 기존 작업이 완전히 내려가기 전에 다시 등록하면 "Bootstrap failed: 5" 가 나므로 기다린다.
+  for _ in $(seq 1 20); do
+    launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1 || break
+    sleep 0.5
+  done
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$1.plist"
   echo "등록: $1"
 }

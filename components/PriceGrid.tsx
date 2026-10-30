@@ -28,6 +28,7 @@ export default function PriceGrid({ quotes }: { quotes: Record<string, Quote | n
                     <p className={`text-sm tabular-nums ${changeClass(q.changePct)}`}>{formatPct(q.changePct)}</p>
                     <p className="mt-1 text-[11px] text-ink-3">
                       {STATUS_LABEL[q.marketStatus] ?? ""} {formatAsOf(q.asOf)}
+                      {q.stale && <span title="최근 조회가 실패해 직전 시세를 표시합니다"> · 지연</span>}
                     </p>
                   </>
                 ) : (

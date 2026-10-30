@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import BriefingView from "@/components/BriefingView";
 import PriceGrid from "@/components/PriceGrid";
 import PrinciplesCard from "@/components/PrinciplesCard";
@@ -7,15 +8,31 @@ import { fetchAllQuotes } from "@/lib/quotes";
 
 export const dynamic = "force-dynamic";
 
+// 주가 API 가 느릴 때도 원칙·브리핑은 바로 보이도록 주가 영역만 따로 스트리밍한다.
+async function LivePriceGrid() {
+  return <PriceGrid quotes={await fetchAllQuotes()} />;
+}
+
+function PriceGridFallback() {
+  return (
+    <section>
+      <h2 className="mb-3 text-lg font-bold">주가</h2>
+      <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-3">시세를 불러오는 중...</p>
+    </section>
+  );
+}
+
 export default async function Home() {
-  const [principles, quotes, briefing] = await Promise.all([getPrinciples(), fetchAllQuotes(), getBriefing()]);
+  const [principles, briefing] = await Promise.all([getPrinciples(), getBriefing()]);
   const articles = briefing ? await getBriefingArticles(briefing.date) : [];
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 
   return (
     <div className="space-y-8">
       <PrinciplesCard principles={principles} />
-      <PriceGrid quotes={quotes} />
+      <Suspense fallback={<PriceGridFallback />}>
+        <LivePriceGrid />
+      </Suspense>
       <section>
         <h2 className="mb-3 text-lg font-bold">오늘의 브리핑</h2>
         {!briefing ? (
